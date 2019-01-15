@@ -3,7 +3,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
@@ -11,7 +10,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.zip.CRC32;
 
 public class FileReceiver {
     public static int PORT = 5000;
@@ -24,7 +22,7 @@ public class FileReceiver {
     private State currentState;
     // 2D array defining all transitions that can occur
     private Transition[][] transition;
-    List<byte[]> bodys = new ArrayList<byte[]>();
+    List<byte[]> bodys = new ArrayList<>();
     public boolean isEnd = false;
     int falsePackets = 0;
 
@@ -95,7 +93,7 @@ public class FileReceiver {
                 System.out.println("R: RECEIVE PKT");
 
 
-                Packet packet = Packet.deserialize(datagram.getData());
+                Packet packet = Packet.generatePacket(datagram.getData());
 
 
                 if (packet.header.syn) {
@@ -105,15 +103,15 @@ public class FileReceiver {
 
                 short recChecksum = packet.header.checksum;
                 packet.header.checksum = 0;
-                short calcChecksum = packet.header.createChecksum(packet.serialize());
+                short calcChecksum = packet.header.createChecksum(packet.getFromPacket());
 
                 // Falls ein Packet doppelt kommt muss hier geprüft werden,
                 //true = 0
-                if (recChecksum == calcChecksum && packet.header.zeroOrOne && currentState.equals(State.WFOR_ZERO)) {
+                if (recChecksum == calcChecksum && packet.header.serialNum && currentState.equals(State.WFOR_ZERO)) {
                     processMsg(Msg.SEND_ACK_ZERO, packet);
                     isEnd = packet.header.fin;
                     falsePackets = 0;
-                } else if (recChecksum == calcChecksum && !packet.header.zeroOrOne && currentState.equals(State.WFOR_ONE)) {
+                } else if (recChecksum == calcChecksum && !packet.header.serialNum && currentState.equals(State.WFOR_ONE)) {
                     processMsg(Msg.SEND_ACK_ONE, packet);
                     isEnd = packet.header.fin;
                     falsePackets = 0;
@@ -127,7 +125,7 @@ public class FileReceiver {
                     }
                 }else {
                     System.out.println("packet invalid. Checksums: " + recChecksum + " " + calcChecksum);
-                    System.out.println("Header zeroOne: " + packet.header.zeroOrOne);
+                    System.out.println("Header zeroOne: " + packet.header.serialNum);
                     ++falsePackets;
                     if (falsePackets == 8) {
                         falsePackets = 0;
@@ -196,7 +194,7 @@ public class FileReceiver {
             // ACK SENDEN
             Packet ackPkt = new Packet(false, false, false, ack, new byte[0]);
             ack = !ack;
-            byte[] pkt = ackPkt.serialize();
+            byte[] pkt = ackPkt.getFromPacket();
             sendPackage(new DatagramPacket(pkt, pkt.length));
             bodys.add(getBodyData(packet));
 
@@ -210,7 +208,7 @@ public class FileReceiver {
             // ACK SENDEN
             Packet ackPkt = new Packet(false, false, false, ack, new byte[0]);
             ack = !ack;
-            byte[] pkt = ackPkt.serialize();
+            byte[] pkt = ackPkt.getFromPacket();
             sendPackage(new DatagramPacket(pkt, pkt.length));
             bodys.add(getBodyData(packet));
 
@@ -224,7 +222,7 @@ public class FileReceiver {
             // ACK SENDEN
             Packet ackPkt = new Packet(true, false, false, ack, new byte[0]);
             ack = !ack;
-            byte[] pkt = ackPkt.serialize();
+            byte[] pkt = ackPkt.getFromPacket();
             sendPackage(new DatagramPacket(pkt, pkt.length));
 
             return State.WFOR_ONE;
@@ -237,7 +235,7 @@ public class FileReceiver {
             // ACK SENDEN
             Packet ackPkt = new Packet(false, false, false, ack, new byte[0]);
             ack = !ack;
-            byte[] pkt = ackPkt.serialize();
+            byte[] pkt = ackPkt.getFromPacket();
             sendPackage(new DatagramPacket(pkt, pkt.length));
 
             return State.WFOR_ZERO;

@@ -15,9 +15,9 @@ public class Packet {
 	public Packet(boolean zeroOrOne, boolean fin, boolean syn, boolean ack, byte[] body) {
 		this.body = body;
         header = new Header(zeroOrOne, fin, syn, ack, (short) body.length);
-        byte[] checksumBytes = new byte[header.serialize().length + body.length];
-        System.arraycopy(header.serialize(), 0, checksumBytes, 0, header.serialize().length);
-        System.arraycopy(body, 0, checksumBytes, header.serialize().length, body.length);
+        byte[] checksumBytes = new byte[header.bytesFromHeader().length + body.length];
+        System.arraycopy(header.bytesFromHeader(), 0, checksumBytes, 0, header.bytesFromHeader().length);
+        System.arraycopy(body, 0, checksumBytes, header.bytesFromHeader().length, body.length);
         short checksum = header.createChecksum(checksumBytes);
         header = new Header(zeroOrOne, fin, syn, ack, (short) body.length, checksum);
     }
@@ -27,20 +27,20 @@ public class Packet {
 		this.body = body;
 	}
 	
-	public byte[] serialize() {
+	public byte[] getFromPacket() {
 		byte[] data = new byte[Header.HEADER_SIZE + body.length];
-		byte[] headerData = header.serialize();
+		byte[] headerData = header.bytesFromHeader();
 		System.arraycopy(headerData, 0, data, 0, Header.HEADER_SIZE);
 		System.arraycopy(body, 0, data, Header.HEADER_SIZE, body.length);
 
 		return data;		
 	}
 	
-	public static Packet deserialize(byte[] data) {
+	public static Packet generatePacket(byte[] data) {
 		byte[] headerData = new byte[Header.HEADER_SIZE];
 		System.arraycopy(data, 0, headerData, 0, Header.HEADER_SIZE);
 
-		Header header = Header.deserialize(headerData);
+		Header header = Header.bytesToHeader(headerData);
 		
 		byte[] bodyData = new byte[header.bodylength];
 		System.arraycopy(data, Header.HEADER_SIZE, bodyData, 0, header.bodylength);
@@ -50,7 +50,7 @@ public class Packet {
 	
 	
 	static class Header {
-		public boolean zeroOrOne;
+		public boolean serialNum;
 		public boolean fin;
 		public boolean syn;
 		public boolean ack;
@@ -58,9 +58,9 @@ public class Packet {
 		public short checksum = 0;
 		public static final int HEADER_SIZE = 7;
 
-        public Header(boolean zeroOrOne, boolean fin, boolean syn, boolean ack, short bodylength) {
+        public Header(boolean serialNum, boolean fin, boolean syn, boolean ack, short bodylength) {
             super();
-            this.zeroOrOne = zeroOrOne;
+            this.serialNum = serialNum;
             this.fin = fin;
             this.syn = syn;
             this.ack = ack;
@@ -68,9 +68,9 @@ public class Packet {
 
         }
 
-		public Header(boolean zeroOrOne, boolean fin, boolean syn, boolean ack, short bodylength, short checksum) {
+		public Header(boolean serialNum, boolean fin, boolean syn, boolean ack, short bodylength, short checksum) {
 			super();
-			this.zeroOrOne = zeroOrOne;
+			this.serialNum = serialNum;
 			this.fin = fin;
 			this.syn = syn;
 			this.ack = ack;
@@ -78,7 +78,7 @@ public class Packet {
 			this.checksum = checksum;
 		}
 		
-		public static Header deserialize(byte[] header) {
+		public static Header bytesToHeader(byte[] header) {
 			ByteBuffer bb = ByteBuffer.allocate(7);
 	    	bb.put(header);
 	    	bb.position(0);
@@ -110,9 +110,9 @@ public class Packet {
             return (short)crcSum;
         }
 		
-		public byte[] serialize() {			
+		public byte[] bytesFromHeader() {
 			BitSet bs = new BitSet();
-			bs.set(0, zeroOrOne);
+			bs.set(0, serialNum);
 			bs.set(1, fin);
 			bs.set(2, syn);
 			bs.set(3, ack);

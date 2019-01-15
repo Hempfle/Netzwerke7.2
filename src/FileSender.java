@@ -40,12 +40,12 @@ public class FileSender {
 			DatagramPacket rcvPkt = new DatagramPacket(ackBuffer, ackBuffer.length);
 			clientSocket.receive(rcvPkt);
 
-			Packet ackPkt = Packet.deserialize(rcvPkt.getData());
+			Packet ackPkt = Packet.generatePacket(rcvPkt.getData());
 			System.out.println("S: RECEIVED ACK: " + ackPkt.header.ack);
 
 			short recChecksum = ackPkt.header.checksum;
 			ackPkt.header.checksum = 0;
-			short calcChecksum = ackPkt.header.createChecksum(ackPkt.serialize());
+			short calcChecksum = ackPkt.header.createChecksum(ackPkt.getFromPacket());
 
 			if (ackPkt.header.ack == expectedAck && recChecksum == calcChecksum) {
 				expectedAck = !expectedAck;
@@ -156,7 +156,7 @@ public class FileSender {
 		List<DatagramPacket> datagramPackets = new ArrayList<DatagramPacket>();
 
 		for (int i = 0; i < packagesCount; i++) {
-			byte[] pkt = datagrams.get(i).serialize();
+			byte[] pkt = datagrams.get(i).getFromPacket();
 			datagramPackets.add(new DatagramPacket(pkt, pkt.length));
 		}
 		
