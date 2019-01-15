@@ -9,11 +9,13 @@ import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 public class FileSender {
 	private static final int PORT = 8888;
 	private static final String HOST = "localhost";
-	private static final int ACK_TIMEOUT = 3000;
+	//private static final String HOST = "129.187.110.7";
+	private static final int ACK_TIMEOUT = 100;
 	public static int RECEIVER_PORT = 5000; 
 	public boolean expectedAck = true;
 	private static final int PACKET_SIZE = 300;
@@ -25,6 +27,7 @@ public class FileSender {
 		clientSocket = new DatagramSocket(PORT);
 		clientSocket.setSoTimeout(ACK_TIMEOUT);
 		InetAddress IPAddress = InetAddress.getByName(HOST);
+
 		clientSocket.connect(IPAddress, RECEIVER_PORT);
 	}
 	
@@ -36,9 +39,9 @@ public class FileSender {
 			byte[] ackBuffer = new byte[7];
 			DatagramPacket rcvPkt = new DatagramPacket(ackBuffer, ackBuffer.length);
 			clientSocket.receive(rcvPkt);
-			System.out.println("S: RECEIVED ACK");
 
 			Packet ackPkt = Packet.deserialize(rcvPkt.getData());
+			System.out.println("S: RECEIVED ACK: " + ackPkt.header.ack);
 
 			short recChecksum = ackPkt.header.checksum;
 			ackPkt.header.checksum = 0;
@@ -68,17 +71,40 @@ public class FileSender {
 	
 	public void start(String filePath) throws IOException {
 		List<DatagramPacket> packages = getDatagramPackets(getFileBytes(filePath));
-	
+		Random random = new Random();
 		for (int i = 0; i < packages.size(); i++) {
 			boolean sending = true;
 			while(sending) {
 
-				//todo: hier abganfen und dann senden/bzw nicht senden?
+				//todo: hier abfangen und dann senden/bzw nicht senden?
 				// duplizieren: Methode 2x aufrufen
 				//Paket löschen
 				//ByteFehler
 
-				sending = !sendPackage(packages.get(i));
+				//wird gehandled
+
+				if (random.nextInt(100) < 10) {
+					System.out.println("Paket verloren");
+				}
+				//durch sending true wird Packet immer wieder versandt ABER Zustandsautomat wartet auf andere SeqNum. => Ohne Zustandsautomat geht es
+				else if (random.nextInt(100) < 5) {
+					sending = !sendPackage(packages.get(i));
+					sending = !sendPackage(packages.get(i));
+					System.out.println("doppelt send");
+				}
+				//durch sending true wird Packet immer wieder versandt ABER Zustandsautomat wartet auf andere SeqNum.
+
+				else if (random.nextInt(100) < 5) {
+					DatagramPacket tmpPacket = packages.get(i);
+					byte[] packetByteData = tmpPacket.getData().clone();
+					packetByteData[tmpPacket.getData().length - 1] =  (byte)1;
+					sending = !sendPackage(new DatagramPacket(packetByteData, packetByteData.length, InetAddress.getByName(HOST), RECEIVER_PORT));
+					System.out.println("corrupted");
+				} else {
+					System.out.println("normal");
+					sending = !sendPackage(packages.get(i));
+				}
+
 
 			}
 		}
@@ -119,7 +145,10 @@ public class FileSender {
 			byte[] bodyData = byteBlocks.get(i);
 			if (i == 0) {
 				datagrams.add(new Packet(i % 2 == 0, false, true, false, bodyData));
-			} else {
+			} else if (i == packagesCount - 1) {
+				datagrams.add(new Packet(i % 2 == 0, true, false, false, bodyData));
+			}
+			else {
 				datagrams.add(new Packet(i % 2 == 0, false, false, false, bodyData));
 			}
 		}

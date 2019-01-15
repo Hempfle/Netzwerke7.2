@@ -15,14 +15,18 @@ import java.util.zip.CRC32;
 
 public class FileReceiver {
     public static int PORT = 5000;
-    public static int SOCKET_TIMEOUT = 10000;
-    public static String targetPath = "C:\\Users\\chris\\Desktop\\OperationArrowhead\\OperationArrowhead\\src\\";
+    public static int senderPort = 8888;
+    public static int SOCKET_TIMEOUT = 60000;
+    public static String targetPath = "C:\\Users\\chris\\Desktop\\";
+    //public static String targetPath = "C:\\Users\\Mel\\Desktop\\";
     private DatagramSocket socket;
     public boolean ack = true;
     private State currentState;
     // 2D array defining all transitions that can occur
     private Transition[][] transition;
     List<byte[]> bodys = new ArrayList<byte[]>();
+    public boolean isEnd = false;
+    int falsePackets = 0;
 
 
     enum State {
@@ -30,7 +34,7 @@ public class FileReceiver {
     }
 
     enum Msg {
-        SEND_ACK_ZERO, SEND_ACK_ONE
+        SEND_ACK_ZERO, SEND_ACK_ONE, RESEND_ACK_ZERO, RESEND_ACK_ONE
     }
 
     abstract class Transition {
@@ -51,6 +55,8 @@ public class FileReceiver {
         transition = new Transition[State.values().length][Msg.values().length];
         transition[State.WFOR_ZERO.ordinal()][Msg.SEND_ACK_ZERO.ordinal()] = new SendAckZero();
         transition[State.WFOR_ONE.ordinal()][Msg.SEND_ACK_ONE.ordinal()] = new SendAckOne();
+        transition[State.WFOR_ONE.ordinal()][Msg.RESEND_ACK_ZERO.ordinal()] = new ResendZero();
+        transition[State.WFOR_ZERO.ordinal()][Msg.RESEND_ACK_ONE.ordinal()] = new ResendOne();
 
         System.out.println("New current state: " + currentState);
     }
@@ -83,13 +89,14 @@ public class FileReceiver {
     public void start() throws IOException {
         Instant firstTime = Instant.now();
         try {
-            while (true) {
+            while (!isEnd) {
                 DatagramPacket datagram = new DatagramPacket(new byte[Short.MAX_VALUE], Short.MAX_VALUE);
                 this.socket.receive(datagram);
                 System.out.println("R: RECEIVE PKT");
 
 
                 Packet packet = Packet.deserialize(datagram.getData());
+
 
                 if (packet.header.syn) {
                     datagram.getAddress();
@@ -102,27 +109,41 @@ public class FileReceiver {
 
                 // Falls ein Packet doppelt kommt muss hier geprüft werden,
                 //true = 0
-
                 if (recChecksum == calcChecksum && packet.header.zeroOrOne && currentState.equals(State.WFOR_ZERO)) {
                     processMsg(Msg.SEND_ACK_ZERO, packet);
+                    isEnd = packet.header.fin;
+                    falsePackets = 0;
                 } else if (recChecksum == calcChecksum && !packet.header.zeroOrOne && currentState.equals(State.WFOR_ONE)) {
                     processMsg(Msg.SEND_ACK_ONE, packet);
-                } else {
+                    isEnd = packet.header.fin;
+                    falsePackets = 0;
+                } else if (recChecksum == calcChecksum) {
+                    isEnd = packet.header.fin;
+                    falsePackets = 0;
+                    if (currentState.equals(State.WFOR_ONE)) {
+                        processMsg(Msg.RESEND_ACK_ZERO, packet);
+                    } else {
+                        processMsg(Msg.RESEND_ACK_ONE, packet);
+                    }
+                }else {
+                    System.out.println("packet invalid. Checksums: " + recChecksum + " " + calcChecksum);
+                    System.out.println("Header zeroOne: " + packet.header.zeroOrOne);
+                    ++falsePackets;
+                    if (falsePackets == 8) {
+                        falsePackets = 0;
+                        if (currentState.equals(State.WFOR_ONE)) {
+                            currentState = State.WFOR_ZERO;
+                        } else {
+                            currentState = State.WFOR_ONE;
+                        }
+                    }
                     continue;
                 }
 
-                // da sonst der body doppelt abgespeichert wird
-                //bodys.add(getBodyData(packet));
-/*
-				// ACK SENDEN
-				Packet ackPkt = new Packet(false, false, false, ack, new byte[0]);
-				ack = !ack;
-				byte[] pkt = ackPkt.serialize();
-				sendPackage(new DatagramPacket(pkt, pkt.length));
-*/
+
             }
         } catch (SocketTimeoutException ex) {
-            System.out.println("ReciverTIMEOUT!");
+            System.out.println("RecieverTIMEOUT!");
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -192,6 +213,32 @@ public class FileReceiver {
             byte[] pkt = ackPkt.serialize();
             sendPackage(new DatagramPacket(pkt, pkt.length));
             bodys.add(getBodyData(packet));
+
+            return State.WFOR_ZERO;
+        }
+    }
+
+    class ResendZero extends Transition {
+        @Override
+        public State execute(Msg input, Packet packet) {
+            // ACK SENDEN
+            Packet ackPkt = new Packet(true, false, false, ack, new byte[0]);
+            ack = !ack;
+            byte[] pkt = ackPkt.serialize();
+            sendPackage(new DatagramPacket(pkt, pkt.length));
+
+            return State.WFOR_ONE;
+        }
+    }
+
+    class ResendOne extends Transition {
+        @Override
+        public State execute(Msg input, Packet packet) {
+            // ACK SENDEN
+            Packet ackPkt = new Packet(false, false, false, ack, new byte[0]);
+            ack = !ack;
+            byte[] pkt = ackPkt.serialize();
+            sendPackage(new DatagramPacket(pkt, pkt.length));
 
             return State.WFOR_ZERO;
         }
