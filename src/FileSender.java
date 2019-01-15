@@ -13,9 +13,9 @@ import java.util.Random;
 
 public class FileSender {
 	private static final int PORT = 8888;
-	private static final String HOST = "localhost";
-	//private static final String HOST = "129.187.110.7";
-	private static final int ACK_TIMEOUT = 100;
+	//private static final String HOST = "localhost";
+	private static final String HOST = "129.187.34.50";
+	private static final int ACK_TIMEOUT = 500;
 	public static int RECEIVER_PORT = 5000; 
 	public boolean expectedAck = true;
 	private static final int PACKET_SIZE = 300;
@@ -75,6 +75,7 @@ public class FileSender {
 		for (int i = 0; i < packages.size(); i++) {
 			boolean sending = true;
 			while(sending) {
+				sending = !sendPackage(packages.get(i));
 
 				//todo: hier abfangen und dann senden/bzw nicht senden?
 				// duplizieren: Methode 2x aufrufen

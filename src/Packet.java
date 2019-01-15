@@ -12,14 +12,14 @@ public class Packet {
     
     
     
-	public Packet(boolean zeroOrOne, boolean fin, boolean syn, boolean ack, byte[] body) {
+	public Packet(boolean serialNum, boolean fin, boolean syn, boolean ack, byte[] body) {
 		this.body = body;
-        header = new Header(zeroOrOne, fin, syn, ack, (short) body.length);
+        header = new Header(serialNum, fin, syn, ack, (short) body.length);
         byte[] checksumBytes = new byte[header.bytesFromHeader().length + body.length];
         System.arraycopy(header.bytesFromHeader(), 0, checksumBytes, 0, header.bytesFromHeader().length);
         System.arraycopy(body, 0, checksumBytes, header.bytesFromHeader().length, body.length);
         short checksum = header.createChecksum(checksumBytes);
-        header = new Header(zeroOrOne, fin, syn, ack, (short) body.length, checksum);
+        header = new Header(serialNum, fin, syn, ack, (short) body.length, checksum);
     }
 	
 	public Packet(Header header, byte[] body) {
@@ -87,7 +87,7 @@ public class Packet {
 	    	bb.get(bitSetByte, 0, 1);
 	    	BitSet bitSet = BitSet.valueOf(bitSetByte);
 
-	    	boolean zeroOrOne = bitSet.get(0);
+	    	boolean serialNum = bitSet.get(0);
 	    	boolean fin = bitSet.get(1);
 	    	boolean syn = bitSet.get(2);
 	    	boolean ack = bitSet.get(3);
@@ -96,7 +96,7 @@ public class Packet {
 			short bodyLength = bb.getShort();
 			short checksum = bb.getShort();
 
-			return new Header(zeroOrOne, fin, syn, ack, bodyLength, checksum);
+			return new Header(serialNum, fin, syn, ack, bodyLength, checksum);
 		}
 
         public short createChecksum(byte[] input) {
